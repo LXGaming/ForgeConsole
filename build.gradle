@@ -1,0 +1,92 @@
+plugins {
+    id "java"
+    id "signing"
+}
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+group = "io.github.lxgaming"
+archivesBaseName = "ForgeConsole"
+version = "1.0.0"
+
+configurations {
+    provided {
+        compile.extendsFrom(provided)
+    }
+
+    build.dependsOn("signJar")
+    compileJava.options.encoding = "UTF-8"
+}
+
+repositories {
+    jcenter()
+    maven {
+        name = "lxgaming"
+        url = "https://dl.bintray.com/lxgaming/maven"
+    }
+    maven {
+        name = "minecraftforge"
+        url = "https://files.minecraftforge.net/maven"
+    }
+}
+
+dependencies {
+    provided("com.google.code.findbugs:jsr305:3.0.2")
+    provided("cpw.mods:modlauncher:4.2.0")
+    compile("io.github.lxgaming:classloaderutils:1.0.0")
+    provided("net.minecrell:terminalconsoleappender:1.2.0")
+    provided("net.sf.jopt-simple:jopt-simple:5.0.4")
+    provided("org.apache.logging.log4j:log4j-api:2.11.2")
+    compile("org.fusesource.jansi:jansi:1.18")
+    provided("org.jline:jline:3.14.1")
+}
+
+jar {
+    from {
+        (configurations.compile - configurations.provided).findAll({
+            it.isDirectory() || it.name.endsWith(".jar")
+        }).collect({
+            it.isDirectory() ? it : zipTree(it)
+        })
+    }
+
+    exclude("module-info.class")
+}
+
+processResources {
+    from("LICENSE")
+    rename("LICENSE", "LICENSE-${archivesBaseName}")
+}
+
+task signJar {
+    doFirst {
+        if (!project.hasProperty("signing.keyStorePath") || !project.hasProperty("signing.secretKeyRingFile")) {
+            project.logger.warn("========== [WARNING] ==========")
+            project.logger.warn("")
+            project.logger.warn("   This build is not signed!   ")
+            project.logger.warn("")
+            project.logger.warn("========== [WARNING] ==========")
+            throw new StopExecutionException()
+        }
+    }
+
+    doLast {
+        configurations.archives.allArtifacts.files.each {
+            ant.signjar(
+                jar: it,
+                alias: project.property("signing.alias"),
+                storepass: project.property("signing.keyStorePassword"),
+                keystore: project.property("signing.keyStorePath"),
+                keypass: project.property("signing.keyStorePassword"),
+                preservelastmodified: project.property("signing.preserveLastModified"),
+                tsaurl: project.property("signing.timestampAuthority"),
+                digestalg: project.property("signing.digestAlgorithm")
+            )
+            project.logger.lifecycle("JAR Signed: " + it.name)
+
+            signing.sign(it)
+            project.logger.lifecycle("PGP Signed: " + it.name)
+        }
+    }
+}
