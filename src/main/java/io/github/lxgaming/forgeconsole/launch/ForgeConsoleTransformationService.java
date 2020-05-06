@@ -22,15 +22,14 @@ import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 import cpw.mods.modlauncher.api.IncompatibleEnvironmentException;
 import io.github.lxgaming.classloader.ClassLoaderUtils;
-import net.minecrell.terminalconsole.TerminalConsoleAppender;
+import io.github.lxgaming.forgeconsole.task.AddAnsiTask;
+import io.github.lxgaming.forgeconsole.task.RemoveAnsiTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jline.terminal.impl.jansi.JansiSupportImpl;
 
 import javax.annotation.Nonnull;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -40,8 +39,7 @@ import java.util.Set;
 public class ForgeConsoleTransformationService implements ITransformationService {
     
     public static final String NAME = "forgeconsole";
-    
-    private static final Logger LOGGER = LogManager.getLogger("ForgeConsole Launch");
+    public static final Logger LOGGER = LogManager.getLogger("ForgeConsole Launch");
     
     public ForgeConsoleTransformationService() {
         if (Launcher.INSTANCE == null) {
@@ -66,6 +64,18 @@ public class ForgeConsoleTransformationService implements ITransformationService
     
     @Override
     public void onLoad(IEnvironment env, Set<String> otherServices) throws IncompatibleEnvironmentException {
+        try {
+            if (shouldDisableAnsi()) {
+                if (RemoveAnsiTask.prepare()) {
+                    RemoveAnsiTask.execute();
+                }
+                
+                return;
+            }
+        } catch (Exception ex) {
+            LOGGER.error("Encountered an error", ex);
+        }
+        
         // Is Forge shipping Jansi?
         if (JansiSupportImpl.getJansiMajorVersion() != 0) {
             // Yes, must be the end of the fucken world!
@@ -96,22 +106,11 @@ public class ForgeConsoleTransformationService implements ITransformationService
         }
         
         try {
-            setField(JansiSupportImpl.class.getDeclaredField("JANSI_MAJOR_VERSION"), null, 1);
-            setField(JansiSupportImpl.class.getDeclaredField("JANSI_MINOR_VERSION"), null, 18);
-            
-            LOGGER.debug("Jansi Version: {}.{}", JansiSupportImpl.getJansiMajorVersion(), JansiSupportImpl.getJansiMinorVersion());
-            
-            Method initializeTerminalMethod = TerminalConsoleAppender.class.getDeclaredMethod("initializeTerminal");
-            initializeTerminalMethod.setAccessible(true);
-            
-            // Reinitialize TerminalConsoleAppender
-            TerminalConsoleAppender.close();
-            initializeTerminalMethod.invoke(null);
-            
-            // Move the cursor to the start of the line to overwrite the ANSI reset.
-            System.out.print("\u001b[10D");
+            if (AddAnsiTask.prepare()) {
+                AddAnsiTask.execute();
+            }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOGGER.error("Encountered an error", ex);
         }
     }
     
@@ -119,6 +118,13 @@ public class ForgeConsoleTransformationService implements ITransformationService
     @Override
     public List<ITransformer> transformers() {
         return new ArrayList<>();
+    }
+    
+    private boolean shouldDisableAnsi() throws Exception {
+        StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+        
+        // MultiMC
+        return stackTraceElements[stackTraceElements.length - 1].getClassName().equals("org.multimc.EntryPoint");
     }
     
     /**
@@ -152,20 +158,6 @@ public class ForgeConsoleTransformationService implements ITransformationService
             }
         } catch (Throwable ex) {
             // no-op
-        }
-    }
-    
-    private void setField(Field field, Object instance, Object value) {
-        try {
-            field.setAccessible(true);
-            
-            Field modifiersField = Field.class.getDeclaredField("modifiers");
-            modifiersField.setAccessible(true);
-            modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-            
-            field.set(instance, value);
-        } catch (Exception ex) {
-            LOGGER.error("Encountered an error while setting {}.{}", field.getDeclaringClass().getName(), field.getName(), ex);
         }
     }
     
