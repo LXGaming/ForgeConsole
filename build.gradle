@@ -20,14 +20,10 @@ configurations {
 }
 
 repositories {
-    jcenter()
-    maven {
-        name = "lxgaming"
-        url = "https://dl.bintray.com/lxgaming/maven"
-    }
+    mavenCentral()
     maven {
         name = "minecraftforge"
-        url = "https://files.minecraftforge.net/maven"
+        url = "https://maven.minecraftforge.net/"
     }
 }
 
@@ -83,10 +79,10 @@ task signJar {
                 tsaurl: project.property("signing.timestampAuthority"),
                 digestalg: project.property("signing.digestAlgorithm")
             )
-            project.logger.lifecycle("JAR Signed: " + it.name)
+            project.logger.lifecycle("JAR Signed: ${it.name}")
 
             signing.sign(it)
-            project.logger.lifecycle("PGP Signed: " + it.name)
+            project.logger.lifecycle("PGP Signed: ${it.name}")
         }
     }
 }
